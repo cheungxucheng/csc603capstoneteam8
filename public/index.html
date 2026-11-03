@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Study Spark — your AI study partner</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">✦</div><div><strong>study<span>spark</span></strong><small>AI study partner</small></div></div>
+      <button class="new-session" id="new-session"><span>＋</span> New study session</button>
+      <nav class="primary-nav" aria-label="Main navigation">
+        <a class="active" href="#chat"><span>⌁</span> Ask Spark</a>
+        <a href="#progress"><span>◒</span> My progress</a>
+        <a href="#materials"><span>▤</span> Course materials</a>
+      </nav>
+      <div class="sidebar-section"><div class="section-label">Recent sessions <button aria-label="More sessions">•••</button></div><div id="session-list"></div></div>
+      <div class="sidebar-bottom"><div class="upgrade-card"><div class="sparkle">✦</div><strong>Make every study hour count.</strong><p>Get focused feedback based on your course materials.</p><button>Explore premium <span>→</span></button></div><div class="profile"><div class="avatar">JC</div><div><strong>Jordan Carter</strong><small>Biology 101 · Spring</small></div><span class="more">•••</span></div></div>
+    </aside>
+
+    <main class="main-content" id="chat">
+      <header class="topbar"><div class="breadcrumb"><span>Biology 101</span><b>/</b><span>Study session</span></div><div class="top-actions"><button class="icon-button" aria-label="Notifications">♧<i></i></button><button class="help-button">? <span>Help</span></button></div></header>
+      <section class="chat-area">
+        <div class="welcome"><div class="eyebrow"><span class="live-dot"></span> SPARK IS READY</div><h1>What are you curious about<br/><em>today?</em></h1><p>Ask anything from your course. I’ll help you understand it,<br class="desktop"/> not just memorize it.</p></div>
+        <div class="prompt-grid"><button class="prompt-card" data-prompt="Can you explain how osmosis works?"><span class="prompt-icon purple">≋</span><span><strong>Explain a concept</strong><small>“Can you explain osmosis?”</small></span><b>→</b></button><button class="prompt-card" data-prompt="Give me a practice question about cell transport."><span class="prompt-icon orange">✎</span><span><strong>Practice together</strong><small>“Quiz me on cell transport”</small></span><b>→</b></button><button class="prompt-card" data-prompt="Help me make a study plan for my biology exam."><span class="prompt-icon green">◷</span><span><strong>Make a study plan</strong><small>“I have an exam next week”</small></span><b>→</b></button></div>
+        <div class="messages" id="messages" aria-live="polite"></div>
+        <form class="composer" id="chat-form"><textarea id="message-input" rows="1" placeholder="Ask Spark anything about Biology 101..." aria-label="Message Spark"></textarea><div class="composer-tools"><button type="button" class="attach" title="Attach material">⌕ <span>Attach</span></button><span class="shortcut">⌘ ↵</span><button class="send-button" type="submit" aria-label="Send message">↑</button></div></form>
+        <div class="composer-note">Spark can make mistakes. Check important answers against your course materials.</div>
+      </section>
+    </main>
+
+    <aside class="insights" id="progress"><div class="insights-head"><div><div class="eyebrow">YOUR LEARNING</div><h2>Progress snapshot</h2></div><button class="close-insights" aria-label="Hide insights">×</button></div><div class="streak"><div class="streak-icon">✦</div><div><strong>7 day streak</strong><span>Keep the momentum going</span></div><div class="mini-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i class="today"></i></div></div><div class="mastery"><div class="card-heading"><strong>Course mastery</strong><span>72%</span></div><div class="progress-track"><div></div></div><p>Based on your recent questions and quiz results.</p></div><div class="focus-card"><div class="card-heading"><strong>Suggested focus</strong><span class="tag">THIS WEEK</span></div><h3>Membrane transport</h3><p>You’re getting there. A little more practice will help lock this in.</p><button class="outline-button" data-prompt="Help me practice membrane transport.">Practice this topic <span>→</span></button></div><div class="stats-row"><div><strong>48</strong><span>Questions asked</span></div><div><strong>6</strong><span>Quizzes completed</span></div></div><div class="tip"><span>✧</span><p><strong>Study tip</strong><br/>Try teaching the concept back to Spark in your own words.</p></div></aside>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
