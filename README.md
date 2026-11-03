@@ -1,4 +1,5 @@
 # Study Spark
+Tech Stack: React, JS, Python, MySQL, Llama
 
 A dependency-light skeleton for a teaching assistant AI. The frontend is a responsive chat experience with recent sessions, learning progress, suggested topics, and course-material context. The backend is a small Node HTTP server with demo API stubs.
 
