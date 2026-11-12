@@ -1,8 +1,8 @@
 {
-  "name": "study-spark-skeleton",
-  "version": "0.1.0",
+  "name": "owlchemy",
+  "version": "0.2.0",
   "private": true,
-  "description": "Teaching assistant AI frontend and backend skeleton",
+  "description": "OwlChemy — AI study partner and intelligent tutoring assistant",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"

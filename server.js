@@ -31,9 +31,10 @@ function loadEnv() {
 }
 loadEnv();
 
-// Import database and LLM services
+// Import database, RAG pipeline, and LLM services
 const db = require('./db');
-const { generateStudySparkResponse } = require('./llm');
+const rag = require('./rag');
+const { generateOwlChemyResponse } = require('./llm');
 
 const port = process.env.PORT || 3000;
 const publicDir = path.join(__dirname, 'public');
@@ -43,7 +44,7 @@ function json(res, status, data) {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS'
   });
   res.end(JSON.stringify(data));
 }
@@ -51,7 +52,14 @@ function json(res, status, data) {
 function parseBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', chunk => { body += chunk; });
+    req.on('data', chunk => {
+      body += chunk;
+      // Safeguard against gigantic uploads (15MB limit)
+      if (body.length > 15 * 1024 * 1024) {
+        req.destroy();
+        reject(new Error('Payload too large'));
+      }
+    });
     req.on('end', () => {
       try {
         resolve(body ? JSON.parse(body) : {});
@@ -84,13 +92,12 @@ async function handleApi(req, res, url) {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS'
     });
     return res.end();
   }
 
   const { user, token } = getAuthUser(req);
-  // Default to demo user if not logged in, ensuring instant out-of-the-box experience
   const fallbackDemoUser = db.findUserByEmail('jordan@example.com');
   const activeUser = user || fallbackDemoUser;
 
@@ -100,7 +107,7 @@ async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/health') {
     return json(res, 200, {
       ok: true,
-      service: 'study-spark-api',
+      service: 'owlchemy-api',
       database: 'sqlite-connected',
       authenticated: !!user
     });
@@ -204,28 +211,89 @@ async function handleApi(req, res, url) {
   }
 
   // --------------------------------------------------------------------------
-  // Course Materials / Documents (Database-backed)
+  // Course Materials & RAG Document Ingestion
   // --------------------------------------------------------------------------
   if (req.method === 'GET' && url.pathname === '/api/documents') {
     const documents = db.getDocuments(activeUser.id);
     return json(res, 200, { documents });
   }
 
+  // View chunks of a specific document
+  if (req.method === 'GET' && url.pathname === '/api/documents/chunks') {
+    const docId = url.searchParams.get('id');
+    if (!docId) return json(res, 400, { error: 'Document id is required' });
+    const chunks = db.getDocumentChunks(docId);
+    return json(res, 200, { chunks });
+  }
+
+  // Add document by direct text or note
   if (req.method === 'POST' && url.pathname === '/api/documents') {
     const body = await parseBody(req);
     const name = String(body.name || 'Untitled course material').trim();
-    const content = String(body.content || '').trim();
+    const rawContent = String(body.content || '').trim();
+
+    if (!rawContent) {
+      return json(res, 400, { error: 'Document content is required' });
+    }
+
     const document = db.createDocument({
       userId: activeUser.id,
       name,
-      content,
-      chunks: Math.max(1, Math.ceil(content.length / 500)),
+      content: rawContent,
       status: 'Ready'
     });
+
     return json(res, 201, {
       document,
-      message: 'Course material successfully stored in database.'
+      message: `Successfully ingested "${name}" and generated ${document.chunks} searchable passage chunks.`
     });
+  }
+
+  // Upload document file (Text, Markdown, or PDF encoded as base64 or string)
+  if (req.method === 'POST' && url.pathname === '/api/documents/upload') {
+    const body = await parseBody(req);
+    const filename = String(body.filename || body.name || 'Course note.txt').trim();
+    const fileData = body.fileData || body.content || '';
+
+    let extractedText = '';
+    if (body.base64) {
+      const buffer = Buffer.from(fileData, 'base64');
+      extractedText = rag.extractText(buffer, filename);
+    } else {
+      extractedText = rag.extractText(fileData, filename);
+    }
+
+    if (!extractedText || extractedText.length < 15) {
+      return json(res, 400, {
+        error: 'Could not extract readable text from the uploaded file. Please verify the file contains readable text.'
+      });
+    }
+
+    const document = db.createDocument({
+      userId: activeUser.id,
+      name: filename.replace(/\.[^/.]+$/, ''), // remove file extension for cleaner title
+      content: extractedText,
+      status: 'Ready'
+    });
+
+    return json(res, 201, {
+      ok: true,
+      document,
+      message: `Extracted ${extractedText.length} characters into ${document.chunks} RAG knowledge chunks.`
+    });
+  }
+
+  // Delete a document
+  if ((req.method === 'DELETE' && url.pathname === '/api/documents') || (req.method === 'POST' && url.pathname === '/api/documents/delete')) {
+    const body = req.method === 'POST' ? await parseBody(req) : {};
+    const docId = url.searchParams.get('id') || body.id;
+    if (!docId) return json(res, 400, { error: 'Document id is required' });
+
+    const success = db.deleteDocument(docId, activeUser.id);
+    if (!success) {
+      return json(res, 403, { error: 'Could not delete document or permission denied' });
+    }
+    return json(res, 200, { ok: true, message: 'Document and its chunks deleted successfully' });
   }
 
   // --------------------------------------------------------------------------
@@ -257,7 +325,7 @@ async function handleApi(req, res, url) {
       return json(res, 400, { error: 'message is required' });
     }
 
-    // 1. Retrieve relevant passages from the database
+    // 1. Retrieve relevant passages from the RAG chunks database
     const retrievedPassages = db.retrievePassages(prompt, activeUser.id, 3);
 
     // 2. Fetch recent conversation history if a sessionId is specified
@@ -275,7 +343,7 @@ async function handleApi(req, res, url) {
     });
 
     // 4. Generate answer via Hugging Face Inference API (or fallback simulator)
-    const llmResponse = await generateStudySparkResponse({
+    const llmResponse = await generateOwlChemyResponse({
       message: prompt,
       retrievedPassages,
       conversationHistory
@@ -290,7 +358,7 @@ async function handleApi(req, res, url) {
       citations: llmResponse.citations
     });
 
-    // 6. Track student activity
+    // 6. Track student activity in database
     db.incrementUserQuestions(activeUser.id);
 
     return json(res, 200, llmResponse);
@@ -329,6 +397,6 @@ http.createServer(async (req, res) => {
     json(res, 500, { error: 'Unexpected server error', detail: error.message });
   }
 }).listen(port, () => {
-  console.log(`Study Spark server running at http://localhost:${port}`);
-  console.log(`Database initialized using SQLite (${process.env.DATABASE_PATH || './studyspark.db'})`);
+  console.log(`OwlChemy server running at http://localhost:${port}`);
+  console.log(`Database connected via SQLite (${db.dbPath})`);
 });

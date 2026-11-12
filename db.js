@@ -2,12 +2,22 @@ const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const rag = require('./rag');
 
-// Determine database path (defaults to studyspark.db in the project root)
-const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'studyspark.db');
+// Determine database path (defaults to owlchemy.db in project root, with backward compatibility for studyspark.db)
+function resolveDbPath() {
+  if (process.env.DATABASE_PATH) return process.env.DATABASE_PATH;
+  const owlDb = path.join(__dirname, 'owlchemy.db');
+  const legacyDb = path.join(__dirname, 'studyspark.db');
+  if (fs.existsSync(owlDb)) return owlDb;
+  if (fs.existsSync(legacyDb)) return legacyDb;
+  return owlDb;
+}
+
+const dbPath = resolveDbPath();
 const db = new DatabaseSync(dbPath);
 
-// Enable foreign key constraints and WAL journal mode for performance
+// Enable foreign key constraints for integrity
 db.exec('PRAGMA foreign_keys = ON;');
 
 /**
@@ -34,7 +44,7 @@ function verifyPassword(password, storedHash) {
 }
 
 /**
- * Initialize all database tables
+ * Initialize all database tables for OwlChemy
  */
 function initDatabase() {
   db.exec(`
@@ -72,6 +82,15 @@ function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS document_chunks (
+      id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      chunk_index INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      char_count INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS chat_messages (
       id TEXT PRIMARY KEY,
       session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
@@ -97,19 +116,19 @@ function initDatabase() {
 }
 
 /**
- * Seed initial demo data for Jordan Carter (the initial profile)
+ * Seed initial demo data for Jordan Carter & sample Biology 101 course notes
  */
 function seedDemoData() {
   const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get('jordan@example.com');
+  let demoUserId = 'user-demo-1';
+
   if (!existingUser) {
-    const demoUserId = 'user-demo-1';
     const pwdHash = hashPassword('password123');
     db.prepare(`
       INSERT INTO users (id, email, password_hash, name, course)
       VALUES (?, ?, ?, ?, ?)
     `).run(demoUserId, 'jordan@example.com', pwdHash, 'Jordan Carter', 'Biology 101 · Spring');
 
-    // Seed progress for demo user
     db.prepare(`
       INSERT INTO user_progress (user_id, streak, questions, mastery, strengths, focus)
       VALUES (?, ?, ?, ?, ?, ?)
@@ -122,7 +141,6 @@ function seedDemoData() {
       'Membrane transport'
     );
 
-    // Seed sessions for demo user
     const insertSession = db.prepare(`
       INSERT INTO sessions (id, user_id, title, time, icon)
       VALUES (?, ?, ?, ?, ?)
@@ -130,57 +148,97 @@ function seedDemoData() {
     insertSession.run('session-1', demoUserId, 'Cell membranes & transport', 'Today', '▣');
     insertSession.run('session-2', demoUserId, 'Photosynthesis review', 'Yesterday', '✦');
     insertSession.run('session-3', demoUserId, 'Enzyme kinetics practice', 'Oct 28', '◒');
+  } else {
+    demoUserId = existingUser.id;
   }
 
   // Seed documents if empty
   const docCount = db.prepare('SELECT COUNT(*) as count FROM documents').get().count;
   if (docCount === 0) {
-    const insertDoc = db.prepare(`
-      INSERT INTO documents (id, user_id, name, chunks, status, content)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
-    insertDoc.run(
-      'doc-1',
-      null,
-      'Biology 101 notes',
-      12,
-      'Ready',
-      `Cell Membrane and Transport Mechanisms:
+    insertDocumentWithChunks({
+      id: 'doc-1',
+      userId: null,
+      name: 'Biology 101 notes',
+      content: `Cell Membrane and Transport Mechanisms:
 The plasma membrane is selectively permeable, composed of a phospholipid bilayer with hydrophilic heads facing outward and hydrophobic fatty acid tails facing inward.
 Transport across the membrane can be passive or active.
 Passive transport requires no cellular energy (ATP) and moves solutes down their concentration gradient (from high to low concentration).
 Types of passive transport include simple diffusion (small nonpolar molecules like O2 and CO2), facilitated diffusion (using transmembrane proteins like aquaporins and ion channels), and osmosis (the net movement of water across a semipermeable membrane from low solute to high solute concentration).
 Active transport requires ATP and transport proteins (such as the sodium-potassium pump, Na+/K+ ATPase) to move solutes against their electrochemical gradient.`
-    );
+    });
 
-    insertDoc.run(
-      'doc-2',
-      null,
-      'Cell structure study guide',
-      8,
-      'Ready',
-      `Eukaryotic Cell Structures and Organelles:
+    insertDocumentWithChunks({
+      id: 'doc-2',
+      userId: null,
+      name: 'Cell structure study guide',
+      content: `Eukaryotic Cell Structures and Organelles:
 1. Nucleus: Stores genetic material (DNA) and directs cellular activity through transcription.
 2. Ribosomes: Protein synthesis factories found free in cytosol or bound to rough endoplasmic reticulum.
 3. Endoplasmic Reticulum: Rough ER synthesizes and folds proteins; smooth ER synthesizes lipids, metabolizes carbs, and detoxifies poisons.
 4. Golgi Apparatus: Modifies, sorts, and packages proteins from the ER for secretion or intracellular delivery.
 5. Mitochondria: Sites of cellular respiration, generating ATP through the Krebs cycle and oxidative phosphorylation.
 6. Chloroplasts: Found in plant cells and algae, sites of photosynthesis where light energy is converted to chemical energy.`
-    );
+    });
 
-    insertDoc.run(
-      'doc-3',
-      null,
-      'Enzymes & Metabolism summary',
-      6,
-      'Ready',
-      `Enzymes and Reaction Kinetics:
+    insertDocumentWithChunks({
+      id: 'doc-3',
+      userId: null,
+      name: 'Enzymes & Metabolism summary',
+      content: `Enzymes and Reaction Kinetics:
 Enzymes are biological catalysts, predominantly proteins, that accelerate chemical reactions by lowering activation energy without being consumed.
 Substrates bind to the enzyme active site forming an enzyme-substrate complex via induced fit.
 Factors affecting enzyme kinetics include temperature, pH, substrate concentration, and competitive/non-competitive inhibitors.`
-    );
+    });
+  } else {
+    // Backfill chunks if document_chunks table is empty
+    const chunkCount = db.prepare('SELECT COUNT(*) as count FROM document_chunks').get().count;
+    if (chunkCount === 0) {
+      const existingDocs = db.prepare('SELECT id, content FROM documents WHERE content IS NOT NULL').all();
+      for (const d of existingDocs) {
+        if (!d.content) continue;
+        const chunks = rag.chunkText(d.content);
+        for (const c of chunks) {
+          db.prepare(`
+            INSERT INTO document_chunks (id, document_id, chunk_index, content, char_count)
+            VALUES (?, ?, ?, ?, ?)
+          `).run(`chunk-${d.id}-${c.chunkIndex}`, d.id, c.chunkIndex, c.content, c.charCount);
+        }
+        db.prepare('UPDATE documents SET chunks = ? WHERE id = ?').run(chunks.length, d.id);
+      }
+    }
   }
+}
+
+/**
+ * Internal helper to insert a document and index all of its RAG chunks
+ */
+function insertDocumentWithChunks({ id = null, userId = null, name, content, status = 'Ready' }) {
+  const docId = id || `doc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const cleanContent = rag.cleanText(content);
+  const chunks = rag.chunkText(cleanContent);
+
+  db.prepare(`
+    INSERT INTO documents (id, user_id, name, chunks, status, content)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(docId, userId, name, chunks.length, status, cleanContent);
+
+  const insertChunkStmt = db.prepare(`
+    INSERT INTO document_chunks (id, document_id, chunk_index, content, char_count)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  for (const c of chunks) {
+    const chunkId = `chunk-${docId}-${c.chunkIndex}`;
+    insertChunkStmt.run(chunkId, docId, c.chunkIndex, c.content, c.charCount);
+  }
+
+  return {
+    id: docId,
+    userId,
+    name,
+    chunks: chunks.length,
+    status
+  };
 }
 
 // User & Auth operations
@@ -192,7 +250,6 @@ function createUser({ email, password, name, course = 'Biology 101 · Spring' })
     VALUES (?, ?, ?, ?, ?)
   `).run(id, email.toLowerCase().trim(), passwordHash, name.trim(), course);
 
-  // Initialize progress record
   db.prepare(`
     INSERT INTO user_progress (user_id, streak, questions, mastery, strengths, focus)
     VALUES (?, 1, 0, 0, ?, ?)
@@ -268,13 +325,28 @@ function getDocuments(userId = null) {
   `).all();
 }
 
-function createDocument({ userId = null, name, content = '', chunks = 1, status = 'Ready' }) {
-  const id = `doc-${Date.now()}`;
-  db.prepare(`
-    INSERT INTO documents (id, user_id, name, chunks, status, content)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, userId, name, chunks, status, content);
-  return { id, userId, name, chunks, status };
+function createDocument({ userId = null, name, content = '', status = 'Ready' }) {
+  return insertDocumentWithChunks({ userId, name, content, status });
+}
+
+function deleteDocument(docId, userId = null) {
+  if (userId) {
+    const doc = db.prepare('SELECT id, user_id FROM documents WHERE id = ?').get(docId);
+    if (!doc || (doc.user_id && doc.user_id !== userId)) {
+      return false;
+    }
+  }
+  db.prepare('DELETE FROM documents WHERE id = ?').run(docId);
+  return true;
+}
+
+function getDocumentChunks(documentId) {
+  return db.prepare(`
+    SELECT id, document_id, chunk_index, content, char_count
+    FROM document_chunks
+    WHERE document_id = ?
+    ORDER BY chunk_index ASC
+  `).all(documentId);
 }
 
 // User learning progress
@@ -333,76 +405,44 @@ function getChatHistory(sessionId) {
 }
 
 /**
- * Retrieve passages from ingested documents matching a student question query.
- * Breaks stored document content into logical paragraphs/passages and ranks them
- * by keyword overlap score.
- * 
- * NOTE FOR FUTURE EXPANSION:
- * This retriever provides the interface where you can replace lexical keyword
- * ranking with dense vector embeddings 
- * (HuggingFace sentence-transformers, pgvector, or Chromadb/Faiss).
+ * Retrieve passages from ingested course document chunks matching a student query.
+ * Leverages the BM25-based chunk scoring engine in rag.js.
  */
 function retrievePassages(query, userId = null, limit = 3) {
-  const docs = db.prepare(`
-    SELECT id, name, content
-    FROM documents
-    WHERE (user_id IS NULL OR user_id = ?) AND content IS NOT NULL
+  // Query all candidate chunks for available documents (global + user)
+  const candidateChunks = db.prepare(`
+    SELECT 
+      c.id,
+      c.document_id AS documentId,
+      d.name AS documentName,
+      c.chunk_index AS chunkIndex,
+      c.content
+    FROM document_chunks c
+    JOIN documents d ON c.document_id = d.id
+    WHERE (d.user_id IS NULL OR d.user_id = ?)
   `).all(userId || '');
 
-  const terms = query
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(t => t.length > 2 && !['what', 'how', 'why', 'can', 'you', 'explain', 'tell', 'about', 'the', 'and', 'for', 'with'].includes(t));
-
-  const allPassages = [];
-
-  for (const doc of docs) {
-    if (!doc.content) continue;
-    // Split document into paragraphs/passages
-    const paragraphs = doc.content
-      .split(/\n\s*\n|\n(?=[0-9]+\.|\bTypes\b|\bFactors\b)/)
-      .map(p => p.trim())
-      .filter(p => p.length > 20);
-
-    for (const para of paragraphs) {
-      const lower = para.toLowerCase();
-      let matchCount = 0;
-      for (const term of terms) {
-        if (lower.includes(term)) {
-          matchCount++;
-        }
-      }
-
-      // Calculate simple relevance score
-      const score = terms.length > 0 ? Number((matchCount / terms.length).toFixed(2)) : 0.5;
-
-      allPassages.push({
-        documentId: doc.id,
-        document: doc.name,
-        score: Math.max(score, 0.4), // Base baseline score for relevant material
-        text: para
-      });
-    }
+  // If no chunks in database, return empty
+  if (!candidateChunks || candidateChunks.length === 0) {
+    return [];
   }
 
-  // Sort by score descending
-  allPassages.sort((a, b) => b.score - a.score);
+  // Use RAG ranker to score and pick top passages
+  const ranked = rag.rankPassages(query, candidateChunks, { limit, minScore: 0.15 });
 
-  // Return top matches, or fallback default passages if query has low overlap
-  const results = allPassages.slice(0, limit);
-  if (results.length === 0 && docs.length > 0) {
-    return [
-      {
-        documentId: docs[0].id,
-        document: docs[0].name,
-        score: 0.75,
-        text: docs[0].content.slice(0, 250) + '...'
-      }
-    ];
+  // Fallback if score threshold filtered everything out
+  if (ranked.length === 0 && candidateChunks.length > 0) {
+    const first = candidateChunks[0];
+    return [{
+      documentId: first.documentId,
+      document: first.documentName,
+      chunkIndex: first.chunkIndex,
+      score: 0.5,
+      text: first.content
+    }];
   }
 
-  return results;
+  return ranked;
 }
 
 // Initialize tables on load
@@ -410,6 +450,7 @@ initDatabase();
 
 module.exports = {
   db,
+  dbPath,
   hashPassword,
   verifyPassword,
   createUser,
@@ -422,6 +463,8 @@ module.exports = {
   createSession,
   getDocuments,
   createDocument,
+  deleteDocument,
+  getDocumentChunks,
   getProgress,
   incrementUserQuestions,
   saveChatMessage,

@@ -1104,3 +1104,254 @@ textarea {
     border-color: #c0c5c5;
     background: #fafaf8;
 }
+
+
+/* ==========================================================================
+   Course Materials Manager & Chunks Preview
+   ========================================================================== */
+.materials-dialog {
+    max-width: 580px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 26px;
+}
+
+.materials-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    max-height: 60vh;
+    padding-right: 4px;
+}
+
+.materials-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.material-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: #fafaf9;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.material-card:hover {
+    background: #ffffff;
+    border-color: #d1d5d8;
+}
+
+.material-icon {
+    font-size: 20px;
+    color: var(--purple);
+    width: 34px;
+    height: 34px;
+    background: var(--pale-purple);
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+}
+
+.material-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.material-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.material-meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.material-badge {
+    background: #eef2f5;
+    color: #4b5563;
+    padding: 2px 6px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.material-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.action-btn-small {
+    border: 1px solid var(--line);
+    background: #ffffff;
+    color: var(--muted);
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.action-btn-small:hover {
+    color: var(--ink);
+    border-color: #adb5bd;
+}
+
+.action-btn-small.danger:hover {
+    color: #dc2626;
+    border-color: #fca5a5;
+    background: #fef2f2;
+}
+
+.file-dropzone {
+    border: 2px dashed #cfd5d8;
+    background: #fafaf9;
+    border-radius: 10px;
+    padding: 22px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.file-dropzone:hover,
+.file-dropzone.dragover {
+    border-color: var(--purple);
+    background: #f8f7ff;
+}
+
+.dropzone-icon {
+    font-size: 28px;
+}
+
+.dropzone-text {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.dropzone-sub {
+    font-size: 10px;
+    color: #a0a7a9;
+}
+
+.chunks-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+}
+
+.link-btn {
+    border: 0;
+    background: transparent;
+    color: var(--purple);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+}
+
+.link-btn:hover {
+    text-decoration: underline;
+}
+
+.chunks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.chunk-card {
+    background: #fafaf9;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #374151;
+}
+
+.chunk-badge {
+    display: inline-block;
+    font-weight: 700;
+    color: var(--purple);
+    margin-bottom: 4px;
+    font-size: 10px;
+}
+
+/* Citations in Chat */
+.citation-box {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(0,0,0,0.07);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.citation-header {
+    font-size: 11px;
+    font-weight: 700;
+    color: #525a5e;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.citation-pill {
+    background: rgba(106, 85, 216, 0.08);
+    border: 1px solid rgba(106, 85, 216, 0.2);
+    color: var(--purple);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s;
+    text-align: left;
+}
+
+.citation-pill:hover {
+    background: rgba(106, 85, 216, 0.14);
+}
+
+.citation-snippet {
+    display: none;
+    margin-top: 4px;
+    padding: 8px 10px;
+    background: #f8f9fa;
+    border-left: 3px solid var(--purple);
+    font-size: 11px;
+    color: #4b5563;
+    border-radius: 0 6px 6px 0;
+    line-height: 1.45;
+}
+
+.citation-snippet.expanded {
+    display: block;
+}

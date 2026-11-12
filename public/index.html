@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Study Spark — your AI study partner</title>
+  <title>OwlChemy — your AI study partner & tutor</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-mark">✦</div>
-        <div><strong>study<span>spark</span></strong><small>AI study partner</small></div>
+        <div class="brand-mark">🦉</div>
+        <div><strong>owl<span>chemy</span></strong><small>AI study partner</small></div>
       </div>
       <button class="new-session" id="new-session"><span>＋</span> New study session</button>
       <nav class="primary-nav" aria-label="Main navigation">
-        <a class="active" href="#chat"><span>⌁</span> Ask Spark</a>
-        <a href="#progress"><span>◒</span> My progress</a>
-        <a href="#materials"><span>▤</span> Course materials</a>
+        <a class="active" href="#chat" id="nav-chat-link"><span>⌁</span> Ask OwlChemy</a>
+        <a href="#materials" id="nav-materials-link"><span>▤</span> Course materials</a>
+        <a href="#progress" id="nav-progress-link"><span>◒</span> My progress</a>
       </nav>
       <div class="sidebar-section">
         <div class="section-label">Recent sessions <button id="add-session-btn" title="Create new session" aria-label="More sessions">＋</button></div>
@@ -48,16 +48,16 @@
           <button class="top-auth-button" id="top-auth-btn">
             <span>✦</span> <span id="top-auth-text">Sign in</span>
           </button>
-          <button class="icon-button" aria-label="Notifications">♧<i></i></button>
+          <button class="icon-button" id="open-materials-topbar" title="Course Materials" aria-label="Course Materials">▤<i></i></button>
           <button class="help-button" id="help-btn">? <span>Help</span></button>
         </div>
       </header>
 
       <section class="chat-area">
         <div class="welcome">
-          <div class="eyebrow"><span class="live-dot"></span> SPARK IS READY</div>
+          <div class="eyebrow"><span class="live-dot"></span> OWLCHEMY IS READY</div>
           <h1>What are you curious about<br/><em>today?</em></h1>
-          <p>Ask anything from your course. I’ll help you understand it,<br class="desktop"/> not just memorize it.</p>
+          <p>Ask anything from your course materials. I’ll break it down,<br class="desktop"/> guide your thinking, and help you master it.</p>
         </div>
 
         <div class="prompt-grid">
@@ -81,14 +81,14 @@
         <div class="messages" id="messages" aria-live="polite"></div>
 
         <form class="composer" id="chat-form">
-          <textarea id="message-input" rows="1" placeholder="Ask Spark anything about Biology 101..." aria-label="Message Spark"></textarea>
+          <textarea id="message-input" rows="1" placeholder="Ask OwlChemy anything about Biology 101..." aria-label="Message OwlChemy"></textarea>
           <div class="composer-tools">
-            <button type="button" class="attach" id="attach-btn" title="View attached materials">⌕ <span>Materials</span></button>
+            <button type="button" class="attach" id="attach-btn" title="Manage course materials">▤ <span>Materials</span></button>
             <span class="shortcut">⌘ ↵</span>
             <button class="send-button" type="submit" aria-label="Send message">↑</button>
           </div>
         </form>
-        <div class="composer-note">Spark grounds explanations in course documents. Check critical details against original notes.</div>
+        <div class="composer-note">OwlChemy grounds answers in course materials. Verify critical details with primary notes.</div>
       </section>
     </main>
 
@@ -133,8 +133,8 @@
         </div>
       </div>
       <div class="tip">
-        <span>✧</span>
-        <p><strong>Study tip</strong><br/>Try teaching the concept back to Spark in your own words.</p>
+        <span>🦉</span>
+        <p><strong>Study tip</strong><br/>Try teaching the concept back to OwlChemy in your own words.</p>
       </div>
     </aside>
   </div>
@@ -145,9 +145,9 @@
       <button type="button" class="modal-close" id="auth-modal-close" aria-label="Close dialog">×</button>
       
       <div class="modal-header">
-        <div class="brand-mark small">✦</div>
+        <div class="brand-mark small">🦉</div>
         <div>
-          <h2 id="auth-modal-title">Welcome to Study Spark</h2>
+          <h2 id="auth-modal-title">Welcome to OwlChemy</h2>
           <p class="auth-subtitle">Sign in or register to save your study sessions, track mastery, and personalize tutoring.</p>
         </div>
       </div>
@@ -182,6 +182,71 @@
 
       <div class="auth-hint">
         <strong>Demo account:</strong> <code>jordan@example.com</code> / <code>password123</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- Course Materials & RAG Document Manager Modal -->
+  <div id="materials-modal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-dialog materials-dialog" role="dialog" aria-modal="true" aria-labelledby="materials-modal-title">
+      <button type="button" class="modal-close" id="materials-modal-close" aria-label="Close dialog">×</button>
+      
+      <div class="modal-header">
+        <div class="brand-mark small">▤</div>
+        <div>
+          <h2 id="materials-modal-title">Course Materials & Knowledge Base</h2>
+          <p class="auth-subtitle">Upload notes, study guides, or slides. OwlChemy will chunk, index, and retrieve them for tutoring.</p>
+        </div>
+      </div>
+
+      <div class="auth-tabs" role="tablist">
+        <button type="button" class="auth-tab active" id="tab-mat-list" role="tab" aria-selected="true">Current Materials (<span id="mat-count">0</span>)</button>
+        <button type="button" class="auth-tab" id="tab-mat-upload" role="tab" aria-selected="false">Upload / Add Notes</button>
+      </div>
+
+      <!-- Tab 1: Current Materials List -->
+      <div id="panel-mat-list" class="materials-panel">
+        <div id="materials-list-container" class="materials-list">
+          <div style="text-align: center; color: var(--muted); padding: 20px;">Loading materials...</div>
+        </div>
+        <div id="chunks-preview-container" style="display: none;">
+          <div class="chunks-header">
+            <strong id="chunks-doc-title">Document Chunks</strong>
+            <button type="button" class="link-btn" id="close-chunks-btn">← Back to materials</button>
+          </div>
+          <div id="chunks-list" class="chunks-list"></div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Upload / Add Notes -->
+      <div id="panel-mat-upload" class="materials-panel" style="display: none;">
+        <form id="upload-doc-form" class="auth-form">
+          <div class="form-group">
+            <label for="doc-name-input">Material Title</label>
+            <input type="text" id="doc-name-input" placeholder="e.g. Chapter 4 Cellular Respiration" required />
+          </div>
+
+          <div class="form-group">
+            <label>Upload File (.txt, .md, .pdf, .json)</label>
+            <div class="file-dropzone" id="file-dropzone">
+              <span class="dropzone-icon">📄</span>
+              <span class="dropzone-text" id="dropzone-label">Click or drag & drop a course file here</span>
+              <span class="dropzone-sub">Supports Plain Text, Markdown, PDF notes</span>
+              <input type="file" id="file-input" accept=".txt,.md,.markdown,.json,.csv,.pdf" style="display: none;" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="doc-text-input">Or Paste Note Text</label>
+            <textarea id="doc-text-input" rows="4" placeholder="Paste notes, definitions, or lecture summary..."></textarea>
+          </div>
+
+          <div id="upload-status" class="auth-error" style="display: none;"></div>
+
+          <button type="submit" id="doc-submit-btn" class="auth-submit-btn">
+            <span>Ingest & Index Material</span>
+          </button>
+        </form>
       </div>
     </div>
   </div>
