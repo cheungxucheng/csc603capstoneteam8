@@ -30,6 +30,7 @@
 - **Pre-Seeded Demo Account:** `jordan@example.com` / `password123` with sample Biology 101 notes.
 
 ### 3. LLM Tutoring Persona & Hugging Face Integration (`llm.js`)
+### <ins>***Couldn't get Huggingface to work, so using a grok API key with Qwen model***</ins>
 - **Socratic Tutoring Persona:**
   - Grounds explanations in retrieved course excerpts.
   - Structures explanations with intuitive analogies, biological mechanisms, and concrete examples.
