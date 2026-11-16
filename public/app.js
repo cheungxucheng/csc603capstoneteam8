@@ -4,7 +4,7 @@ const messages = $('#messages');
 // State management
 let currentToken = localStorage.getItem('owlchemy_token') || localStorage.getItem('study_spark_token') || null;
 let currentUser = null;
-let currentSessionId = null;
+let currentSessionId = localStorage.getItem('owlchemy_session_id') || null;
 let authMode = 'login'; // 'login' or 'register'
 let selectedFile = null;
 
@@ -142,7 +142,10 @@ async function handleSignOut() {
   }
   localStorage.removeItem('owlchemy_token');
   localStorage.removeItem('study_spark_token');
+  localStorage.removeItem('owlchemy_session_id');
   currentToken = null;
+  currentSessionId = null;
+  messages.innerHTML = '';
   updateAuthUI(null);
   loadSessions();
   loadProgress();
@@ -319,36 +322,152 @@ async function deleteDocument(docId) {
 /**
  * Load study sessions from database
  */
-async function loadSessions() {
+/**
+ * Load study sessions from database and sync active session
+ */
+async function loadSessions(preserveMessages = false) {
   const sessionList = $('#session-list');
   try {
     const response = await fetch('/api/sessions', { headers: authHeaders() });
     const data = await response.json();
     if (data.sessions && data.sessions.length > 0) {
-      sessionList.innerHTML = data.sessions.map((session, index) => `
-        <div class="session ${index === 0 && !currentSessionId ? 'active' : ''}" data-id="${session.id}">
+      // Pick active session: stored session or default to the first
+      const hasActive = data.sessions.some(s => s.id === currentSessionId);
+      if (!hasActive) {
+        currentSessionId = data.sessions[0].id;
+        localStorage.setItem('owlchemy_session_id', currentSessionId);
+      }
+
+      sessionList.innerHTML = data.sessions.map((session) => `
+        <div class="session ${session.id === currentSessionId ? 'active' : ''}" data-id="${session.id}">
           <span class="session-icon">${session.icon || '▣'}</span>
-          <div>
+          <div class="session-body">
             <strong>${escapeHtml(session.title)}</strong>
             <small>${escapeHtml(session.time || 'Recent')}</small>
           </div>
+          <button type="button" class="session-delete-btn" data-id="${session.id}" data-title="${escapeHtml(session.title)}" title="Delete session" aria-label="Delete session">×</button>
         </div>
       `).join('');
 
+      // Click session to select and load its history
       sessionList.querySelectorAll('.session').forEach(el => {
-        el.addEventListener('click', () => {
+        el.addEventListener('click', async () => {
           sessionList.querySelectorAll('.session').forEach(s => s.classList.remove('active'));
           el.classList.add('active');
           currentSessionId = el.dataset.id;
-          messages.innerHTML = '';
-          addMessage(`Switched to study session: ${el.querySelector('strong').textContent}`, 'assistant');
+          localStorage.setItem('owlchemy_session_id', currentSessionId);
+          await loadChatHistory(currentSessionId);
         });
       });
+
+      // Click delete button
+      sessionList.querySelectorAll('.session-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation(); // Don't trigger session select
+          const sessionId = btn.dataset.id;
+          const sessionTitle = btn.dataset.title;
+          if (!confirm(`Are you sure you want to delete session "${sessionTitle}"?`)) return;
+
+          try {
+            const res = await fetch(`/api/sessions?id=${encodeURIComponent(sessionId)}`, {
+              method: 'DELETE',
+              headers: authHeaders()
+            });
+            if (res.ok) {
+              if (currentSessionId === sessionId) {
+                currentSessionId = null;
+                localStorage.removeItem('owlchemy_session_id');
+                messages.innerHTML = '';
+              }
+              await loadSessions();
+            } else {
+              alert('Could not delete session.');
+            }
+          } catch (_) {
+            alert('Error connecting to server.');
+          }
+        });
+      });
+
+      // Load chat history for the active session unless preserveMessages is set
+      if (!preserveMessages && currentSessionId) {
+        await loadChatHistory(currentSessionId);
+      }
+
     } else {
       sessionList.innerHTML = '<div class="session"><div><strong>No sessions yet</strong><small>Start asking questions</small></div></div>';
     }
   } catch (error) {
     sessionList.innerHTML = '<div class="session"><div><strong>Could not load sessions</strong><small>API offline</small></div></div>';
+  }
+}
+
+/**
+ * Render a chat message (user or assistant) with interactive citations
+ */
+function renderChatMessage(msg) {
+  const el = document.createElement('div');
+  const role = msg.role === 'user' ? 'user' : 'assistant';
+  el.className = `message ${role}`;
+
+  const textContainer = document.createElement('div');
+  textContainer.style.whiteSpace = 'pre-wrap';
+  textContainer.textContent = msg.content;
+  el.appendChild(textContainer);
+
+  if (msg.citations && msg.citations.length > 0) {
+    const citationBox = document.createElement('div');
+    citationBox.className = 'citation-box';
+
+    const citationHeader = document.createElement('div');
+    citationHeader.className = 'citation-header';
+    citationHeader.innerHTML = `<span>🦉</span> <span>Grounded in ${msg.citations.length} retrieved course passage${msg.citations.length > 1 ? 's' : ''}:</span>`;
+    citationBox.appendChild(citationHeader);
+
+    msg.citations.forEach((c) => {
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = 'citation-pill';
+      const matchPct = Math.round((c.score || 0.8) * 100);
+      pill.innerHTML = `<span>▤</span> <span>${escapeHtml(c.document)}</span> <small>(${matchPct}% match)</small> ▾`;
+
+      const snippet = document.createElement('div');
+      snippet.className = 'citation-snippet';
+      snippet.textContent = `"${c.text}"`;
+
+      pill.addEventListener('click', () => {
+        snippet.classList.toggle('expanded');
+        pill.innerHTML = `<span>▤</span> <span>${escapeHtml(c.document)}</span> <small>(${matchPct}% match)</small> ${snippet.classList.contains('expanded') ? '▴' : '▾'}`;
+      });
+
+      citationBox.appendChild(pill);
+      citationBox.appendChild(snippet);
+    });
+
+    el.appendChild(citationBox);
+  }
+
+  messages.appendChild(el);
+  return el;
+}
+
+/**
+ * Load and display persisted chat messages for a session from the database
+ */
+async function loadChatHistory(sessionId) {
+  messages.innerHTML = '';
+  if (!sessionId) return;
+  try {
+    const res = await fetch(`/api/chat/history?sessionId=${encodeURIComponent(sessionId)}`, { headers: authHeaders() });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.messages && data.messages.length > 0) {
+      data.messages.forEach(msg => renderChatMessage(msg));
+      const last = messages.lastElementChild;
+      if (last) last.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  } catch (err) {
+    console.warn('Could not load chat history:', err);
   }
 }
 
@@ -476,6 +595,12 @@ async function askOwlChemy(prompt) {
     // Refresh progress stats
     loadProgress();
 
+    if (data.sessionId && data.sessionId !== currentSessionId) {
+      currentSessionId = data.sessionId;
+      localStorage.setItem('owlchemy_session_id', currentSessionId);
+      loadSessions(true);
+    }
+
   } catch (error) {
     typing.textContent = 'OwlChemy is currently unreachable. Please check your local server.';
   }
@@ -517,23 +642,29 @@ document.querySelectorAll('[data-prompt]').forEach(button => {
   });
 });
 
-// New study session button
-$('#new-session').addEventListener('click', async () => {
+// New study session creation
+async function createNewSession(customTitle = null) {
   messages.innerHTML = '';
+  const title = customTitle || prompt('Enter a name for this study session:', 'Biology study session') || 'New study session';
   try {
     const res = await fetch('/api/sessions', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ title: 'New biology study session' })
+      body: JSON.stringify({ title: title.trim() })
     });
     if (res.ok) {
       const data = await res.json();
       currentSessionId = data.session.id;
-      loadSessions();
+      localStorage.setItem('owlchemy_session_id', currentSessionId);
+      await loadSessions(true);
+      addMessage(`Started new session: ${data.session.title}`, 'assistant');
     }
   } catch (_) {}
   $('#message-input').focus();
-});
+}
+
+$('#new-session')?.addEventListener('click', () => createNewSession());
+$('#add-session-btn')?.addEventListener('click', () => createNewSession());
 
 // Course Materials Modal triggers
 $('#attach-btn')?.addEventListener('click', () => openMaterialsModal('list'));

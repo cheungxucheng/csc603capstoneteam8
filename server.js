@@ -210,6 +210,19 @@ async function handleApi(req, res, url) {
     return json(res, 201, { session: newSession });
   }
 
+  // Delete study session
+  if ((req.method === 'DELETE' && url.pathname === '/api/sessions') || (req.method === 'POST' && url.pathname === '/api/sessions/delete')) {
+    const body = req.method === 'POST' ? await parseBody(req) : {};
+    const sessionId = url.searchParams.get('id') || body.id;
+    if (!sessionId) return json(res, 400, { error: 'Session id is required' });
+
+    const success = db.deleteSession(sessionId, activeUser.id);
+    if (!success) {
+      return json(res, 403, { error: 'Could not delete session or permission denied' });
+    }
+    return json(res, 200, { ok: true, message: 'Session deleted successfully' });
+  }
+
   // --------------------------------------------------------------------------
   // Course Materials & RAG Document Ingestion
   // --------------------------------------------------------------------------
@@ -308,8 +321,8 @@ async function handleApi(req, res, url) {
   // Chat History
   // --------------------------------------------------------------------------
   if (req.method === 'GET' && url.pathname === '/api/chat/history') {
-    const sessionId = url.searchParams.get('sessionId');
-    const messages = db.getChatHistory(sessionId);
+    const sessionId = url.searchParams.get('sessionId') || null;
+    const messages = db.getChatHistory(sessionId, activeUser.id);
     return json(res, 200, { messages });
   }
 
@@ -325,24 +338,36 @@ async function handleApi(req, res, url) {
       return json(res, 400, { error: 'message is required' });
     }
 
+    // Resolve an active session so messages are always organized and persisted
+    let activeSessionId = sessionId;
+    if (!activeSessionId) {
+      const userSessions = db.getSessions(activeUser.id);
+      if (userSessions && userSessions.length > 0) {
+        activeSessionId = userSessions[0].id;
+      } else {
+        const newSession = db.createSession({ userId: activeUser.id, title: prompt.slice(0, 30) + '...' });
+        activeSessionId = newSession.id;
+      }
+    }
+
     // 1. Retrieve relevant passages from the RAG chunks database
     const retrievedPassages = db.retrievePassages(prompt, activeUser.id, 3);
 
-    // 2. Fetch recent conversation history if a sessionId is specified
+    // 2. Fetch recent conversation history for this study session
     let conversationHistory = [];
-    if (sessionId) {
-      conversationHistory = db.getChatHistory(sessionId);
+    if (activeSessionId) {
+      conversationHistory = db.getChatHistory(activeSessionId, activeUser.id);
     }
 
     // 3. Save student question to chat history
     db.saveChatMessage({
-      sessionId,
+      sessionId: activeSessionId,
       userId: activeUser.id,
       role: 'user',
       content: prompt
     });
 
-    // 4. Generate answer via Hugging Face Inference API (or fallback simulator)
+    // 4. Generate answer via configured LLM provider
     const llmResponse = await generateOwlChemyResponse({
       message: prompt,
       retrievedPassages,
@@ -351,7 +376,7 @@ async function handleApi(req, res, url) {
 
     // 5. Save assistant reply to chat history
     db.saveChatMessage({
-      sessionId,
+      sessionId: activeSessionId,
       userId: activeUser.id,
       role: 'assistant',
       content: llmResponse.answer,
@@ -361,7 +386,10 @@ async function handleApi(req, res, url) {
     // 6. Track student activity in database
     db.incrementUserQuestions(activeUser.id);
 
-    return json(res, 200, llmResponse);
+    return json(res, 200, {
+      ...llmResponse,
+      sessionId: activeSessionId
+    });
   }
 
   return json(res, 404, { error: 'Not found' });

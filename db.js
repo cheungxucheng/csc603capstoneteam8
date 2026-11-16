@@ -112,6 +112,11 @@ function initDatabase() {
     );
   `);
 
+  // Ensure any orphaned messages are linked to default session
+  try {
+    db.exec(`UPDATE chat_messages SET session_id = 'session-1' WHERE session_id IS NULL;`);
+  } catch (_) {}
+
   seedDemoData();
 }
 
@@ -308,6 +313,17 @@ function createSession({ userId, title, icon = '▣', time = 'Just now' }) {
   return { id, userId, title, time, icon };
 }
 
+function deleteSession(sessionId, userId = null) {
+  if (userId) {
+    const session = db.prepare('SELECT id, user_id FROM sessions WHERE id = ?').get(sessionId);
+    if (!session || (session.user_id && session.user_id !== userId)) {
+      return false;
+    }
+  }
+  db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+  return true;
+}
+
 // Course documents & materials
 function getDocuments(userId = null) {
   if (userId) {
@@ -390,14 +406,25 @@ function saveChatMessage({ id = null, sessionId = null, userId = null, role, con
   return { id: msgId, sessionId, userId, role, content, citations };
 }
 
-function getChatHistory(sessionId) {
-  if (!sessionId) return [];
-  const rows = db.prepare(`
+function getChatHistory(sessionId, userId = null) {
+  let query = `
     SELECT id, role, content, citations, created_at
     FROM chat_messages
-    WHERE session_id = ?
-    ORDER BY created_at ASC
-  `).all(sessionId);
+  `;
+  const params = [];
+
+  if (sessionId) {
+    query += ' WHERE session_id = ?';
+    params.push(sessionId);
+  } else if (userId) {
+    query += ' WHERE user_id = ?';
+    params.push(userId);
+  } else {
+    return [];
+  }
+
+  query += ' ORDER BY created_at ASC';
+  const rows = db.prepare(query).all(...params);
   return rows.map(r => ({
     ...r,
     citations: r.citations ? JSON.parse(r.citations) : []
@@ -461,6 +488,7 @@ module.exports = {
   deleteAuthToken,
   getSessions,
   createSession,
+  deleteSession,
   getDocuments,
   createDocument,
   deleteDocument,

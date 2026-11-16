@@ -1355,3 +1355,55 @@ textarea {
 .citation-snippet.expanded {
     display: block;
 }
+
+
+/* ==========================================================================
+   Recent Session Item Enhancements & Deletion Button
+   ========================================================================== */
+.session {
+    position: relative;
+    cursor: pointer;
+    transition: background 0.15s;
+    justify-content: flex-start;
+}
+
+.session.active {
+    background: #f1efff !important;
+}
+
+.session.active strong {
+    color: var(--purple);
+}
+
+.session-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.session-delete-btn {
+    border: 0;
+    background: transparent;
+    color: #a4abad;
+    font-size: 16px;
+    line-height: 1;
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.15s ease;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.session:hover .session-delete-btn {
+    opacity: 0.65;
+}
+
+.session-delete-btn:hover {
+    opacity: 1 !important;
+    background: #fee2e2;
+    color: #dc2626;
+}
